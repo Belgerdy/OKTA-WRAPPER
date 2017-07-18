@@ -1,4 +1,5 @@
 //oktaapi.js
+//start api: node oktaapi.js <okta_tenant> <api_key>
 //process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 //constants
@@ -32,9 +33,7 @@ router.get('/', function(request, response) {
 });
 
 //gets 200 users and recursively calls itsself if a next link is available
-var getUsers = function(pHttpOptions, pResult, i, callback) {
-    console.log('nesting: ' + i);
-	
+var getUsers = function(pHttpOptions, pResult, callback) {
 	responseBody="";
 	responseHeaders="";
 
@@ -55,7 +54,7 @@ var getUsers = function(pHttpOptions, pResult, i, callback) {
             	nextLink=nextLink.slice(29,nextLink.length-1)
                 pHttpOptions.path = nextLink;
 
-				getUsers(pHttpOptions,responseObj, i+1 , function(response) {
+				getUsers(pHttpOptions,responseObj, function(response) {
 					callback(responseObj);
 				});
             }
@@ -98,6 +97,44 @@ var getGroups = function(pHttpOptions, callback) {
     myReq.end();
 }
 
+var getApps = function(pHttpOptions, pResult, callback) {
+	responseBody="";
+	responseHeaders="";
+
+	var myReq = https.request(pHttpOptions, function(myRes) {
+        
+		responseHeadersLink=myRes.headers.link;
+        myRes.setEncoding('utf8');
+
+        myRes.on('data', (chunk) => {
+        	responseBody+=chunk;
+        });
+
+        myRes.on('end', () => {
+			responseObj = pResult.concat(JSON.parse(responseBody));
+                        
+			if(responseHeadersLink.indexOf('next') >0) {
+            	nextLink=responseHeadersLink.split(",")[1].split(";")[0];
+            	nextLink=nextLink.slice(29,nextLink.length-1)
+                pHttpOptions.path = nextLink;
+
+				getApps(pHttpOptions,responseObj, function(response) {
+					callback(responseObj);
+				});
+            }
+			else {
+			 	callback(responseObj);
+			}
+        });
+	});
+	
+	myReq.on('error', (err) => {
+       	console.log('Error: ', err);
+	});
+	
+    myReq.end();
+}
+
 
 // Basic user functions:
 //   GET  /user = Retrieve all users
@@ -121,7 +158,7 @@ router.route('/users')
 		};
 
 
-		get200users(httpOptions, pResult =[], 0, function(pResponse) {
+		getUsers(httpOptions, pResult =[], function(pResponse) {
 			console.log("User Records : " +pResponse.length); 
 			response.status(200).json(pResponse);
 		});
@@ -152,7 +189,34 @@ router.route('/groups')
 			response.status(200).json(pResponse);
 		});
 	});
+	
+	
+router.route('/apps')
 
+	// get all genera
+	.get(function(request, response) {
+		console.log("GET : apps");
+
+		var httpHeaders = {
+			'Accept'		: 'application/json',
+			'Content-Type'	: 'application/json',   
+			'Authorization'	: oktaKey
+		};
+
+		var httpOptions = {
+			host: oktaURL,
+			path: oktaAPI + '/apps',
+			method: 'GET',
+			headers : httpHeaders
+		};
+
+
+		getApps(httpOptions, pResult =[], function(pResponse) {
+			console.log("User Records : " +pResponse.length); 
+			response.status(200).json(pResponse);
+		});
+	});
+	
 
 app.use('/', router);										// use express router
 
